@@ -1,4 +1,4 @@
-package openai-vectorstore
+package vectorstore
 
 //go:generate paramgen -output=paramgen_dest.go DestinationConfig
 

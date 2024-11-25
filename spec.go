@@ -1,4 +1,4 @@
-package openai-vectorstore
+package vectorstore
 
 import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
