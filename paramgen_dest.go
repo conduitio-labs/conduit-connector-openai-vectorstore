@@ -16,7 +16,7 @@ func (DestinationConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		DestinationConfigApiKey: {
 			Default:     "",
-			Description: "APIKey is the openai api key to use for the api client.",
+			Description: "APIKey is the OpenAI api key to use for the api client.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
