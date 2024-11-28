@@ -7,6 +7,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.12.0
 	github.com/golangci/golangci-lint v1.62.2
 	github.com/matryer/is v1.4.1
+	github.com/sashabaranov/go-openai v1.35.7
 	mvdan.cc/gofumpt v0.7.0
 )
 
