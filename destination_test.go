@@ -128,6 +128,9 @@ func TestWrite_Delete(t *testing.T) {
 func TestMain(m *testing.M) {
 	m.Run()
 
+	// it's much easier to clean up all test data after all tests have run, so
+	// that we don't worry of left over test data on each test.
+	// Assuming each test creates unique data, ofc.
 	cleanupAllTestData()
 }
 
@@ -215,6 +218,9 @@ func cleanupAllTestData() {
 	if err != nil {
 		sdk.Logger(ctx).Fatal().Err(err).Msg("failed to list files")
 	}
+
+	// By default, the list files call has a limit of 10k files, so there should
+	// never be a need to paginate.
 
 	for _, file := range files.Files {
 		if err = client.DeleteFile(ctx, file.ID); err != nil {

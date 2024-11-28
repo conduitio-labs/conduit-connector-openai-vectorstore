@@ -37,8 +37,7 @@ type Destination struct {
 //go:generate paramgen -output=paramgen_dest.go DestinationConfig
 
 type DestinationConfig struct {
-
-	// APIKey is the openai api key to use for the api client.
+	// APIKey is the OpenAI api key to use for the api client.
 	APIKey string `json:"api_key" validate:"required"`
 
 	// VectorStoreID is the id of the vector store to write records into.
@@ -74,6 +73,10 @@ func (d *Destination) Open(ctx context.Context) error {
 
 	sdk.Logger(ctx).Info().Msg("api key is valid")
 
+	_, err := d.client.RetrieveVectorStore(ctx, d.config.VectorStoreID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve vector store %s: %w", d.config.VectorStoreID, err)
+	}
 
 	return nil
 }
@@ -102,7 +105,6 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, er
 func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
 	filename := string(rec.Key.Bytes())
 	filebs := rec.Payload.After.Bytes()
-
 	f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
 		Name:    filename,
 		Bytes:   filebs,
@@ -189,4 +191,3 @@ func (d *Destination) updateFile(ctx context.Context, rec opencdc.Record) error 
 func (d *Destination) Teardown(_ context.Context) error {
 	return nil
 }
-
