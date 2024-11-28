@@ -17,8 +17,6 @@ type Destination struct {
 
 	config DestinationConfig
 	client *openai.Client
-
-	vectorStoreID string
 }
 
 //go:generate paramgen -output=paramgen_dest.go DestinationConfig
@@ -30,7 +28,6 @@ type DestinationConfig struct {
 
 	// VectorStoreID is the id of the vector store to write records into.
 	VectorStoreID string `json:"vector_store_id" validate:"required"`
-
 }
 
 func NewDestination() sdk.Destination {
@@ -42,7 +39,7 @@ func (d *Destination) Parameters() config.Parameters {
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
-	sdk.Logger(ctx).Info().Msg("Configuring Destination...")
+	sdk.Logger(ctx).Info().Msg("configuring destination...")
 	err := sdk.Util.ParseConfig(ctx, cfg, &d.config, NewDestination().Parameters())
 	if err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -53,40 +50,126 @@ func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
 func (d *Destination) Open(ctx context.Context) error {
 	d.client = openai.NewClient(d.config.APIKey)
 
-	// check that the passed api key is valid
-	if _, err := d.client.GetModel(ctx, "gpt-4"); err != nil {
+	// check that the passed api key is valid, so that we ensure that the api
+	// calls have no auth errors.
+
+	if _, err := d.client.ListModels(ctx); err != nil {
 		return fmt.Errorf("failed to validate api key: %w", err)
 	}
+
+	sdk.Logger(ctx).Info().Msg("api key is valid")
 
 
 	return nil
 }
 
 func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
-
 	for i, rec := range recs {
-		filename := string(rec.Key.Bytes())
-		filebs := rec.Payload.After.Bytes()
-
-		f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
-			Name:    filename,
-			Bytes:   filebs,
-			Purpose: openai.PurposeAssistants,
-		})
-		if err != nil {
-			return i, fmt.Errorf("failed to create file: %w", err)
-		}
-
-		_, err = d.client.CreateVectorStoreFile(ctx,
-			d.config.VectorStoreID, openai.VectorStoreFileRequest{FileID: f.ID})
-		if err != nil {
-			return i, fmt.Errorf("failed to add file %s to vector store %s: %w", f.FileName, d.vectorStoreID, err)
+		switch rec.Operation {
+		case opencdc.OperationCreate, opencdc.OperationSnapshot:
+			if err := d.createFile(ctx, rec); err != nil {
+				return i, err
+			}
+		case opencdc.OperationDelete:
+			if err := d.deleteFile(ctx, rec); err != nil {
+				return i, err
+			}
+		case opencdc.OperationUpdate:
+			if err := d.updateFile(ctx, rec); err != nil {
+				return i, err
+			}
 		}
 	}
 
 	return 0, nil
 }
 
+func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
+	filename := string(rec.Key.Bytes())
+	filebs := rec.Payload.After.Bytes()
+
+	f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
+		Name:    filename,
+		Bytes:   filebs,
+		Purpose: openai.PurposeAssistants,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Created file")
+
+	_, err = d.client.CreateVectorStoreFile(ctx,
+		d.config.VectorStoreID, openai.VectorStoreFileRequest{FileID: f.ID})
+	if err != nil {
+		return fmt.Errorf(
+			"failed to add file %s to vector store %s: %w",
+			f.FileName, d.config.VectorStoreID, err)
+	}
+
+	sdk.Logger(ctx).Info().
+		Str("filename", filename).
+		Str("vector_store_id", d.config.VectorStoreID).
+		Msg("Added file to vector store")
+
+	return nil
+}
+
+func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error {
+	filename := string(rec.Key.Bytes())
+
+	files, err := d.client.ListFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list files: %w", err)
+	}
+
+	var fileID string
+	for _, file := range files.Files {
+		if file.FileName == filename {
+			fileID = file.ID
+		}
+	}
+	if fileID == "" {
+		return fmt.Errorf("file not found: %s", filename)
+	}
+
+	err = d.client.DeleteVectorStoreFile(ctx, d.config.VectorStoreID, fileID)
+	if err != nil {
+		return fmt.Errorf("failed to delete file from vector store: %w", err)
+	}
+
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file from vector store")
+
+	if err = d.client.DeleteFile(ctx, fileID); err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file")
+
+	return nil
+}
+
+func (d *Destination) updateFile(ctx context.Context, rec opencdc.Record) error {
+	// OpenAI doesn't provide a way to update the uploaded file, so we need to
+	// delete it and upload it again
+
+	filename := string(rec.Key.Bytes())
+
+	if err := d.deleteFile(ctx, rec); err != nil {
+		return fmt.Errorf("failed to delete file while updating: %w", err)
+	}
+
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file while updating")
+
+	if err := d.createFile(ctx, rec); err != nil {
+		return fmt.Errorf("failed to create file while updating: %w", err)
+	}
+
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Created file while updating")
+
+	return nil
+}
+
 func (d *Destination) Teardown(_ context.Context) error {
 	return nil
 }
+
