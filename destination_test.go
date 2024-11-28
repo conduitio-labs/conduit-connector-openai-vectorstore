@@ -1,3 +1,17 @@
+// Copyright © 2024 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package vectorstore
 
 import (
@@ -6,8 +20,6 @@ import (
 	"io"
 	"os"
 	"testing"
-
-	_ "embed"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -120,6 +132,7 @@ func TestMain(m *testing.M) {
 }
 
 func testDestination(ctx context.Context, t *testing.T, vectorStoreID string) sdk.Destination {
+	t.Helper()
 	is := is.New(t)
 	dest := NewDestination()
 
@@ -138,9 +151,11 @@ func testDestination(ctx context.Context, t *testing.T, vectorStoreID string) sd
 }
 
 func testClient(t *testing.T) *openai.Client {
+	t.Helper()
 	return openai.NewClient(getOpenAIApiKey(t))
 }
 
+//nolint:thelper // no t usage
 func testContext(t *testing.T) context.Context {
 	var writer io.Writer
 	if t != nil {
@@ -166,6 +181,7 @@ func testContext(t *testing.T) context.Context {
 }
 
 func createTestVectorStore(ctx context.Context, t *testing.T) string {
+	t.Helper()
 	is := is.New(t)
 	client := testClient(t)
 
@@ -206,7 +222,7 @@ func cleanupAllTestData() {
 		}
 	}
 
-	sdk.Logger(ctx).Info().Msg("successfully cleaned test files files")
+	sdk.Logger(ctx).Info().Msg("successfully cleaned test files")
 	sdk.Logger(ctx).Info().Msg("deleting vector stores...")
 
 	vectorStores, err := client.ListVectorStores(ctx, openai.Pagination{})
@@ -273,7 +289,9 @@ func (f testFile) recUpdate() opencdc.Record {
 }
 
 func assertFileWritten(
-	ctx context.Context, t *testing.T, writtenFile testFile, vectorStoreID string) {
+	ctx context.Context, t *testing.T, writtenFile testFile, vectorStoreID string,
+) {
+	t.Helper()
 	client := testClient(t)
 	is := is.New(t)
 
@@ -300,6 +318,7 @@ func assertFileWritten(
 }
 
 func assertDeletedFile(ctx context.Context, t *testing.T, filename string) {
+	t.Helper()
 	client := testClient(t)
 	is := is.New(t)
 
@@ -315,6 +334,7 @@ func assertDeletedFile(ctx context.Context, t *testing.T, filename string) {
 
 func envGetter(key string) func(t *testing.T) string {
 	return func(t *testing.T) string {
+		t.Helper()
 		env := os.Getenv(key)
 		if env == "" {
 			t.Fatalf("missing env var %s", key)
