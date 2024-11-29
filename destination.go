@@ -191,15 +191,9 @@ func (d *Destination) upsertFile(
 		return fmt.Errorf("failed to delete file while updating: %w", err)
 	}
 
-	filename := string(rec.Key.Bytes())
-
-	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file while updating")
-
 	if err := d.createFile(ctx, rec); err != nil {
 		return fmt.Errorf("failed to create file while updating: %w", err)
 	}
-
-	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Created file while updating")
 
 	return nil
 }
