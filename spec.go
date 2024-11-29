@@ -26,9 +26,9 @@ var version = "(devel)"
 func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:        "openai-vectorstore",
-		Summary:     "<describe your connector>",
-		Description: "<describe your connector in detail>",
+		Summary:     "A Conduit Connector for OpenAI vector stores",
+		Description: "A destination connector for OpenAI vector stores",
 		Version:     version,
-		Author:      "<your name>",
+		Author:      "Meroxa, Inc.",
 	}
 }
