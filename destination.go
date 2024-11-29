@@ -89,7 +89,7 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, er
 	for i, rec := range recs {
 		switch rec.Operation {
 		case opencdc.OperationCreate, opencdc.OperationSnapshot:
-			if err := d.createFile(ctx, rec); err != nil {
+			if err := d.updateFile(ctx, rec); err != nil {
 				return i, err
 			}
 		case opencdc.OperationDelete:

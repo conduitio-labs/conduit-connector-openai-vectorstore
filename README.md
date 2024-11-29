@@ -4,8 +4,6 @@ The openai vector store connector is one of [Conduit](https://github.com/Conduit
 
 # How is the record written
 
-We currently don't support upload by chunks to OpenAI. Each `opencdc.Record` represents a single file for the connector. The record key is interpreted as the file name.
-
 The connector will read the whole record and try to upload the `.Payload.After` bytes into OpenAI. There's no support for partial uploads at the moment, each record represents a single file. If two records with the same key are received, a single file will be written.
 
 In order to process an update record, we delete the file and create it, which might be a bit slow. Updates then must include the whole file in the record.
