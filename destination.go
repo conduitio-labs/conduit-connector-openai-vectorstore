@@ -87,33 +87,33 @@ func (d *Destination) Open(ctx context.Context) error {
 
 func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
 	for i, rec := range recs {
-		var err error
 		switch rec.Operation {
 		case opencdc.OperationCreate, opencdc.OperationSnapshot:
 			// We want creates and snapshots to not leave duplicated files, so we
 			// interpret them as an upsert
-			err = d.upsertFile(ctx, rec)
+			if err := d.upsertFile(ctx, rec); err != nil {
+				return i, err
+			}
 		case opencdc.OperationUpdate:
-			err = d.upsertFile(ctx, rec)
+			if err := d.upsertFile(ctx, rec); err != nil {
+				return i, err
+			}
 		case opencdc.OperationDelete:
 			listedFiles, err := d.client.ListFiles(ctx)
 			if err != nil {
 				return i, fmt.Errorf("failed to list files: %w", err)
 			}
 
-			err = d.deleteFile(ctx, rec, listedFiles)
-		}
-
-		if err != nil {
-			return i, err
+			if err := d.deleteFile(ctx, rec, listedFiles); err != nil {
+				return i, err
+			}
 		}
 	}
 
 	return len(recs), nil
 }
 
-func (d *Destination) createFile(
-	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
+func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
 	filename := string(rec.Key.Bytes())
 	filebs := rec.Payload.After.Bytes()
 	f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
@@ -149,7 +149,8 @@ var (
 )
 
 func (d *Destination) deleteFile(
-	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
+	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList,
+) error {
 	filename := string(rec.Key.Bytes())
 
 	var fileID string
@@ -175,7 +176,8 @@ func (d *Destination) deleteFile(
 }
 
 func (d *Destination) upsertFile(
-	ctx context.Context, rec opencdc.Record) error {
+	ctx context.Context, rec opencdc.Record,
+) error {
 	// OpenAI doesn't provide a way to update the uploaded file, so we need to
 	// delete it and upload it again
 
@@ -193,7 +195,7 @@ func (d *Destination) upsertFile(
 
 	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file while updating")
 
-	if err := d.createFile(ctx, rec, listedFiles); err != nil {
+	if err := d.createFile(ctx, rec); err != nil {
 		return fmt.Errorf("failed to create file while updating: %w", err)
 	}
 
