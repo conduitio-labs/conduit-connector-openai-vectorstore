@@ -55,7 +55,26 @@ func TestWrite_Create(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(written, 1)
 
-	assertFileWritten(ctx, t, file, vectorStoreID)
+	assertFileWrittenAndUnique(ctx, t, file, vectorStoreID)
+}
+
+func TestWrite_MultipleWritesWithSameKeyDontDuplicate(t *testing.T) {
+	ctx := testContext(t)
+	is := is.New(t)
+	var err error
+
+	vectorStoreID := createTestVectorStore(ctx, t)
+
+	dest := testDestination(ctx, t, vectorStoreID)
+
+	file1, file2 := newTestFile(), newTestFile()
+	file2.name = file1.name
+
+	written, err := dest.Write(ctx, []opencdc.Record{file1.recSnapshot(), file2.recCreate()})
+	is.NoErr(err)
+	is.Equal(written, 2)
+
+	assertFileWrittenAndUnique(ctx, t, file2, vectorStoreID)
 }
 
 func TestWrite_Snapshot(t *testing.T) {
@@ -74,7 +93,7 @@ func TestWrite_Snapshot(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(written, 1)
 
-	assertFileWritten(ctx, t, file, vectorStoreID)
+	assertFileWrittenAndUnique(ctx, t, file, vectorStoreID)
 }
 
 func TestWrite_Update(t *testing.T) {
@@ -100,7 +119,7 @@ func TestWrite_Update(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(written, 1)
 
-	assertFileWritten(ctx, t, file, vectorStoreID)
+	assertFileWrittenAndUnique(ctx, t, file, vectorStoreID)
 }
 
 func TestWrite_Delete(t *testing.T) {
@@ -299,7 +318,7 @@ func (f testFile) recUpdate() opencdc.Record {
 	}
 }
 
-func assertFileWritten(
+func assertFileWrittenAndUnique(
 	ctx context.Context, t *testing.T, writtenFile testFile, vectorStoreID string,
 ) {
 	t.Helper()
@@ -313,6 +332,9 @@ func assertFileWritten(
 	var fileID string
 	for _, openaiFile := range files.Files {
 		if openaiFile.FileName == writtenFile.name {
+			if fileID != "" {
+				t.Fatalf("found multiple files with name %s", writtenFile.name)
+			}
 			fileID = openaiFile.ID
 		}
 	}

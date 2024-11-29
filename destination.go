@@ -86,18 +86,23 @@ func (d *Destination) Open(ctx context.Context) error {
 }
 
 func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
+	currentFiles, err := d.client.ListFiles(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list files: %w", err)
+	}
+
 	for i, rec := range recs {
 		switch rec.Operation {
 		case opencdc.OperationCreate, opencdc.OperationSnapshot:
-			if err := d.updateFile(ctx, rec); err != nil {
+			if err := d.updateFile(ctx, rec, currentFiles); err != nil {
 				return i, err
 			}
 		case opencdc.OperationDelete:
-			if err := d.deleteFile(ctx, rec); err != nil {
+			if err := d.deleteFile(ctx, rec, currentFiles); err != nil {
 				return i, err
 			}
 		case opencdc.OperationUpdate:
-			if err := d.updateFile(ctx, rec); err != nil {
+			if err := d.updateFile(ctx, rec, currentFiles); err != nil {
 				return i, err
 			}
 		}
@@ -106,7 +111,8 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, er
 	return len(recs), nil
 }
 
-func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
+func (d *Destination) createFile(
+	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
 	filename := string(rec.Key.Bytes())
 	filebs := rec.Payload.After.Bytes()
 	f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
@@ -141,16 +147,12 @@ var (
 	ErrDuplicatedFile = errors.New("duplicated")
 )
 
-func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error {
+func (d *Destination) deleteFile(
+	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
 	filename := string(rec.Key.Bytes())
 
-	files, err := d.client.ListFiles(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list files: %w", err)
-	}
-
 	var fileID string
-	for _, file := range files.Files {
+	for _, file := range listedFiles.Files {
 		if file.FileName == filename {
 			if fileID != "" {
 				return fmt.Errorf("duplicated file %s: %w", filename, ErrDuplicatedFile)
@@ -162,7 +164,7 @@ func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error 
 		return ErrFileNotFound
 	}
 
-	err = d.client.DeleteVectorStoreFile(ctx, d.config.VectorStoreID, fileID)
+	err := d.client.DeleteVectorStoreFile(ctx, d.config.VectorStoreID, fileID)
 	if err != nil {
 		return fmt.Errorf("failed to delete file from vector store: %w", err)
 	}
@@ -181,19 +183,20 @@ func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error 
 	return nil
 }
 
-func (d *Destination) updateFile(ctx context.Context, rec opencdc.Record) error {
+func (d *Destination) updateFile(
+	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
 	// OpenAI doesn't provide a way to update the uploaded file, so we need to
 	// delete it and upload it again
 
 	filename := string(rec.Key.Bytes())
 
-	if err := d.deleteFile(ctx, rec); err != nil {
+	if err := d.deleteFile(ctx, rec, listedFiles); err != nil {
 		return fmt.Errorf("failed to delete file while updating: %w", err)
 	}
 
 	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file while updating")
 
-	if err := d.createFile(ctx, rec); err != nil {
+	if err := d.createFile(ctx, rec, listedFiles); err != nil {
 		return fmt.Errorf("failed to create file while updating: %w", err)
 	}
 
