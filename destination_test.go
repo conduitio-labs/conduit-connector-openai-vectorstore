@@ -51,8 +51,9 @@ func TestWrite_Create(t *testing.T) {
 	file := newTestFile()
 	rec := file.recCreate()
 
-	_, err = dest.Write(ctx, []opencdc.Record{rec})
+	written, err := dest.Write(ctx, []opencdc.Record{rec})
 	is.NoErr(err)
+	is.Equal(written, 1)
 
 	assertFileWritten(ctx, t, file, vectorStoreID)
 }
@@ -69,8 +70,9 @@ func TestWrite_Snapshot(t *testing.T) {
 	file := newTestFile()
 	rec := file.recSnapshot()
 
-	_, err = dest.Write(ctx, []opencdc.Record{rec})
+	written, err := dest.Write(ctx, []opencdc.Record{rec})
 	is.NoErr(err)
+	is.Equal(written, 1)
 
 	assertFileWritten(ctx, t, file, vectorStoreID)
 }
@@ -87,14 +89,16 @@ func TestWrite_Update(t *testing.T) {
 	file := newTestFile()
 	rec := file.recSnapshot()
 
-	_, err = dest.Write(ctx, []opencdc.Record{rec})
+	written, err := dest.Write(ctx, []opencdc.Record{rec})
 	is.NoErr(err)
+	is.Equal(written, 1)
 
-	file.contents = "bbb"
+	file.contents = "updated contents"
 	rec = file.recUpdate()
 
-	_, err = dest.Write(ctx, []opencdc.Record{rec})
+	written, err = dest.Write(ctx, []opencdc.Record{rec})
 	is.NoErr(err)
+	is.Equal(written, 1)
 
 	assertFileWritten(ctx, t, file, vectorStoreID)
 }
@@ -119,8 +123,9 @@ func TestWrite_Delete(t *testing.T) {
 		Key:       opencdc.RawData(file.name),
 	}
 
-	_, err = dest.Write(ctx, []opencdc.Record{rec})
+	written, err := dest.Write(ctx, []opencdc.Record{rec})
 	is.NoErr(err)
+	is.Equal(written, 1)
 
 	assertDeletedFile(ctx, t, file.name)
 }

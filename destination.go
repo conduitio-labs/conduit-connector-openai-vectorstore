@@ -45,7 +45,11 @@ type DestinationConfig struct {
 }
 
 func NewDestination() sdk.Destination {
-	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware()...)
+	disable := false
+	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware(sdk.DestinationWithSchemaExtractionConfig{
+		PayloadEnabled: &disable,
+		KeyEnabled:     &disable,
+	})...)
 }
 
 func (d *Destination) Parameters() config.Parameters {
@@ -99,7 +103,7 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, er
 		}
 	}
 
-	return 0, nil
+	return len(recs), nil
 }
 
 func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
@@ -115,7 +119,7 @@ func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error 
 	}
 	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Created file")
 
-	_, err = d.client.CreateVectorStoreFile(ctx,
+	createdFile, err := d.client.CreateVectorStoreFile(ctx,
 		d.config.VectorStoreID, openai.VectorStoreFileRequest{FileID: f.ID})
 	if err != nil {
 		return fmt.Errorf(
@@ -124,7 +128,8 @@ func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error 
 	}
 
 	sdk.Logger(ctx).Info().
-		Str("filename", filename).
+		Str("file name", filename).
+		Str("file id", createdFile.ID).
 		Str("vector_store_id", d.config.VectorStoreID).
 		Msg("Added file to vector store")
 
@@ -147,9 +152,10 @@ func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error 
 	var fileID string
 	for _, file := range files.Files {
 		if file.FileName == filename {
+			if fileID != "" {
+				return fmt.Errorf("duplicated file %s: %w", filename, ErrDuplicatedFile)
+			}
 			fileID = file.ID
-		} else if fileID != "" {
-			return fmt.Errorf("duplicated file %s: %w", filename, ErrDuplicatedFile)
 		}
 	}
 	if fileID == "" {
@@ -161,7 +167,10 @@ func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error 
 		return fmt.Errorf("failed to delete file from vector store: %w", err)
 	}
 
-	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file from vector store")
+	sdk.Logger(ctx).Info().
+		Str("file name", filename).
+		Str("file id", fileID).
+		Msg("Deleted file from vector store")
 
 	if err = d.client.DeleteFile(ctx, fileID); err != nil {
 		return fmt.Errorf("failed to delete file: %w", err)
