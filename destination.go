@@ -131,7 +131,10 @@ func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error 
 	return nil
 }
 
-var ErrFileNotFound = errors.New("file not found")
+var (
+	ErrFileNotFound   = errors.New("file not found")
+	ErrDuplicatedFile = errors.New("duplicated")
+)
 
 func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error {
 	filename := string(rec.Key.Bytes())
@@ -145,6 +148,8 @@ func (d *Destination) deleteFile(ctx context.Context, rec opencdc.Record) error 
 	for _, file := range files.Files {
 		if file.FileName == filename {
 			fileID = file.ID
+		} else if fileID != "" {
+			return fmt.Errorf("duplicated file %s: %w", filename, ErrDuplicatedFile)
 		}
 	}
 	if fileID == "" {
