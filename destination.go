@@ -86,25 +86,26 @@ func (d *Destination) Open(ctx context.Context) error {
 }
 
 func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
-	currentFiles, err := d.client.ListFiles(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to list files: %w", err)
-	}
-
 	for i, rec := range recs {
+		var err error
 		switch rec.Operation {
 		case opencdc.OperationCreate, opencdc.OperationSnapshot:
-			if err := d.updateFile(ctx, rec, currentFiles); err != nil {
-				return i, err
-			}
-		case opencdc.OperationDelete:
-			if err := d.deleteFile(ctx, rec, currentFiles); err != nil {
-				return i, err
-			}
+			// We want creates and snapshots to not leave duplicated files, so we
+			// interpret them as an upsert
+			err = d.upsertFile(ctx, rec)
 		case opencdc.OperationUpdate:
-			if err := d.updateFile(ctx, rec, currentFiles); err != nil {
-				return i, err
+			err = d.upsertFile(ctx, rec)
+		case opencdc.OperationDelete:
+			listedFiles, err := d.client.ListFiles(ctx)
+			if err != nil {
+				return i, fmt.Errorf("failed to list files: %w", err)
 			}
+
+			err = d.deleteFile(ctx, rec, listedFiles)
+		}
+
+		if err != nil {
+			return i, err
 		}
 	}
 
@@ -164,17 +165,7 @@ func (d *Destination) deleteFile(
 		return ErrFileNotFound
 	}
 
-	err := d.client.DeleteVectorStoreFile(ctx, d.config.VectorStoreID, fileID)
-	if err != nil {
-		return fmt.Errorf("failed to delete file from vector store: %w", err)
-	}
-
-	sdk.Logger(ctx).Info().
-		Str("file name", filename).
-		Str("file id", fileID).
-		Msg("Deleted file from vector store")
-
-	if err = d.client.DeleteFile(ctx, fileID); err != nil {
+	if err := d.client.DeleteFile(ctx, fileID); err != nil {
 		return fmt.Errorf("failed to delete file: %w", err)
 	}
 
@@ -183,16 +174,22 @@ func (d *Destination) deleteFile(
 	return nil
 }
 
-func (d *Destination) updateFile(
-	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList) error {
+func (d *Destination) upsertFile(
+	ctx context.Context, rec opencdc.Record) error {
 	// OpenAI doesn't provide a way to update the uploaded file, so we need to
 	// delete it and upload it again
 
-	filename := string(rec.Key.Bytes())
+	listedFiles, err := d.client.ListFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list files: %w", err)
+	}
 
-	if err := d.deleteFile(ctx, rec, listedFiles); err != nil {
+	err = d.deleteFile(ctx, rec, listedFiles)
+	if !errors.Is(err, ErrFileNotFound) && err != nil {
 		return fmt.Errorf("failed to delete file while updating: %w", err)
 	}
+
+	filename := string(rec.Key.Bytes())
 
 	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file while updating")
 
