@@ -8,7 +8,7 @@ The connector will read the whole record and try to upload the `.Payload.After` 
 
 In order to process an update record, we delete the file and create it, which might be a bit slow. Updates then must include the whole file in the record.
 
-Files are written with `assistants` as [purpose](https://platform.openai.com/docs/api-reference/files/create#files-create-purpose).
+Files are written with `assistants` with [purpose](https://platform.openai.com/docs/api-reference/files/create#files-create-purpose) as  part of the request body.
 
 Deletes work as expected, deleting the file from the vector store and deleting the file itself from OpenAI.
 
