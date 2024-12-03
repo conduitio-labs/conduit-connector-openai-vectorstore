@@ -8,23 +8,23 @@ import (
 )
 
 const (
-	DestinationConfigDestinationConfigParam = "destinationConfigParam"
-	DestinationConfigGlobalConfigParamName  = "global_config_param_name"
+	DestinationConfigApiKey        = "api_key"
+	DestinationConfigVectorStoreId = "vector_store_id"
 )
 
 func (DestinationConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		DestinationConfigDestinationConfigParam: {
-			Default:     "yes",
-			Description: "DestinationConfigParam must be either yes or no (defaults to yes).",
+		DestinationConfigApiKey: {
+			Default:     "",
+			Description: "APIKey is the OpenAI api key to use for the api client.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
-				config.ValidationInclusion{List: []string{"yes", "no"}},
+				config.ValidationRequired{},
 			},
 		},
-		DestinationConfigGlobalConfigParamName: {
+		DestinationConfigVectorStoreId: {
 			Default:     "",
-			Description: "GlobalConfigParam is named global_config_param_name and needs to be\nprovided by the user.",
+			Description: "VectorStoreID is the id of the vector store to write records into.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
