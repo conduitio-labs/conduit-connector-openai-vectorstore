@@ -68,19 +68,15 @@ func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
 func (d *Destination) Open(ctx context.Context) error {
 	d.client = openai.NewClient(d.config.APIKey)
 
-	// check that the passed api key is valid, so that we ensure that the api
-	// calls have no auth errors.
-
-	if _, err := d.client.ListModels(ctx); err != nil {
-		return fmt.Errorf("failed to validate api key: %w", err)
-	}
-
-	sdk.Logger(ctx).Info().Msg("api key is valid")
-
 	_, err := d.client.RetrieveVectorStore(ctx, d.config.VectorStoreID)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve vector store %s: %w", d.config.VectorStoreID, err)
 	}
+
+	sdk.Logger(ctx).Info().
+		Str(DestinationConfigApiKey, "valid").
+		Str(DestinationConfigVectorStoreId, "valid").
+		Msg("successfully validated config, destination is ready to start writing records")
 
 	return nil
 }
