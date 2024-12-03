@@ -1,6 +1,6 @@
 # Conduit destination connector for OpenAI vector store
 
-The openai vector store connector is one of [Conduit](https://github.com/ConduitIO/conduit) standalone plugins. It provides a destination connector for [OpenAI vector stores](https://platform.openai.com/docs/api-reference/vector-stores).
+The OpenAI vector store connector is one of [Conduit](https://github.com/ConduitIO/conduit) standalone plugins. It provides a destination connector for [OpenAI vector stores](https://platform.openai.com/docs/api-reference/vector-stores).
 
 # How is the record written
 
