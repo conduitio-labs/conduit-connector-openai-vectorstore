@@ -17,4 +17,6 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
+        run: make test GOTEST_FLAGS="-v -count=1"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

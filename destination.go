@@ -1,52 +1,63 @@
+// Copyright © 2024 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package vectorstore
 
 //go:generate paramgen -output=paramgen_dest.go DestinationConfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/sashabaranov/go-openai"
 )
 
 type Destination struct {
 	sdk.UnimplementedDestination
 
 	config DestinationConfig
+	client *openai.Client
 }
 
+//go:generate paramgen -output=paramgen_dest.go DestinationConfig
+
 type DestinationConfig struct {
-	// Config includes parameters that are the same in the source and destination.
-	Config
-	// DestinationConfigParam must be either yes or no (defaults to yes).
-	DestinationConfigParam string `validate:"inclusion=yes|no" default:"yes"`
+	// APIKey is the OpenAI api key to use for the api client.
+	APIKey string `json:"api_key" validate:"required"`
+
+	// VectorStoreID is the id of the vector store to write records into.
+	VectorStoreID string `json:"vector_store_id" validate:"required"`
 }
 
 func NewDestination() sdk.Destination {
-	// Create Destination and wrap it in the default middleware.
-	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware()...)
+	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware(sdk.DestinationWithSchemaExtractionConfig{
+		PayloadEnabled: lang.Ptr(false),
+		KeyEnabled:     lang.Ptr(false),
+	})...)
 }
 
 func (d *Destination) Parameters() config.Parameters {
-	// Parameters is a map of named Parameters that describe how to configure
-	// the Destination. Parameters can be generated from DestinationConfig with
-	// paramgen.
 	return d.config.Parameters()
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
-	// Configure is the first function to be called in a connector. It provides
-	// the connector with the configuration that can be validated and stored.
-	// In case the configuration is not valid it should return an error.
-	// Testing if your connector can reach the configured data source should be
-	// done in Open, not in Configure.
-	// The SDK will validate the configuration and populate default values
-	// before calling Configure. If you need to do more complex validations you
-	// can do them manually here.
-
-	sdk.Logger(ctx).Info().Msg("Configuring Destination...")
+	sdk.Logger(ctx).Info().Msg("configuring destination...")
 	err := sdk.Util.ParseConfig(ctx, cfg, &d.config, NewDestination().Parameters())
 	if err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -54,24 +65,135 @@ func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func (d *Destination) Open(_ context.Context) error {
-	// Open is called after Configure to signal the plugin it can prepare to
-	// start writing records. If needed, the plugin should open connections in
-	// this function.
+func (d *Destination) Open(ctx context.Context) error {
+	d.client = openai.NewClient(d.config.APIKey)
+
+	_, err := d.client.RetrieveVectorStore(ctx, d.config.VectorStoreID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve vector store %s: %w", d.config.VectorStoreID, err)
+	}
+
+	sdk.Logger(ctx).Info().
+		Str(DestinationConfigApiKey, "valid").
+		Str(DestinationConfigVectorStoreId, "valid").
+		Msg("successfully validated config, destination is ready to start writing records")
+
 	return nil
 }
 
-func (d *Destination) Write(_ context.Context, _ []opencdc.Record) (int, error) {
-	// Write writes len(r) records from r to the destination right away without
-	// caching. It should return the number of records written from r
-	// (0 <= n <= len(r)) and any error encountered that caused the write to
-	// stop early. Write must return a non-nil error if it returns n < len(r).
-	return 0, nil
+func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) (int, error) {
+	for i, rec := range recs {
+		switch rec.Operation {
+		case opencdc.OperationCreate, opencdc.OperationSnapshot:
+			// We want creates and snapshots to not leave duplicated files, so we
+			// interpret them as an upsert
+			if err := d.upsertFile(ctx, rec); err != nil {
+				return i, err
+			}
+		case opencdc.OperationUpdate:
+			if err := d.upsertFile(ctx, rec); err != nil {
+				return i, err
+			}
+		case opencdc.OperationDelete:
+			listedFiles, err := d.client.ListFiles(ctx)
+			if err != nil {
+				return i, fmt.Errorf("failed to list files: %w", err)
+			}
+
+			if err := d.deleteFile(ctx, rec, listedFiles); err != nil {
+				return i, err
+			}
+		}
+	}
+
+	return len(recs), nil
+}
+
+func (d *Destination) createFile(ctx context.Context, rec opencdc.Record) error {
+	filename := string(rec.Key.Bytes())
+	filebs := rec.Payload.After.Bytes()
+	f, err := d.client.CreateFileBytes(ctx, openai.FileBytesRequest{
+		Name:    filename,
+		Bytes:   filebs,
+		Purpose: openai.PurposeAssistants,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Created file")
+
+	createdFile, err := d.client.CreateVectorStoreFile(ctx,
+		d.config.VectorStoreID, openai.VectorStoreFileRequest{FileID: f.ID})
+	if err != nil {
+		return fmt.Errorf(
+			"failed to add file %s to vector store %s: %w",
+			f.FileName, d.config.VectorStoreID, err)
+	}
+
+	sdk.Logger(ctx).Info().
+		Str("file name", filename).
+		Str("file id", createdFile.ID).
+		Str("vector_store_id", d.config.VectorStoreID).
+		Msg("Added file to vector store")
+
+	return nil
+}
+
+var (
+	ErrFileNotFound   = errors.New("file not found")
+	ErrDuplicatedFile = errors.New("duplicated")
+)
+
+func (d *Destination) deleteFile(
+	ctx context.Context, rec opencdc.Record, listedFiles openai.FilesList,
+) error {
+	filename := string(rec.Key.Bytes())
+
+	var fileID string
+	for _, file := range listedFiles.Files {
+		if file.FileName == filename {
+			if fileID != "" {
+				return fmt.Errorf("duplicated file %s: %w", filename, ErrDuplicatedFile)
+			}
+			fileID = file.ID
+		}
+	}
+	if fileID == "" {
+		return ErrFileNotFound
+	}
+
+	if err := d.client.DeleteFile(ctx, fileID); err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	sdk.Logger(ctx).Info().Str("filename", filename).Msg("Deleted file")
+
+	return nil
+}
+
+func (d *Destination) upsertFile(
+	ctx context.Context, rec opencdc.Record,
+) error {
+	// OpenAI doesn't provide a way to update the uploaded file, so we need to
+	// delete it and upload it again
+
+	listedFiles, err := d.client.ListFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list files: %w", err)
+	}
+
+	err = d.deleteFile(ctx, rec, listedFiles)
+	if !errors.Is(err, ErrFileNotFound) && err != nil {
+		return fmt.Errorf("failed to delete file while updating: %w", err)
+	}
+
+	if err := d.createFile(ctx, rec); err != nil {
+		return fmt.Errorf("failed to create file while updating: %w", err)
+	}
+
+	return nil
 }
 
 func (d *Destination) Teardown(_ context.Context) error {
-	// Teardown signals to the plugin that all records were written and there
-	// will be no more calls to any other function. After Teardown returns, the
-	// plugin should be ready for a graceful shutdown.
 	return nil
 }
