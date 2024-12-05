@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/sashabaranov/go-openai"
@@ -45,10 +46,9 @@ type DestinationConfig struct {
 }
 
 func NewDestination() sdk.Destination {
-	disable := false
 	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware(sdk.DestinationWithSchemaExtractionConfig{
-		PayloadEnabled: &disable,
-		KeyEnabled:     &disable,
+		PayloadEnabled: lang.Ptr(false),
+		KeyEnabled:     lang.Ptr(false),
 	})...)
 }
 
