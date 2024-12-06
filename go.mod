@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/matryer/is v1.4.1
 	github.com/rs/zerolog v1.33.0
-	github.com/sashabaranov/go-openai v1.35.7
+	github.com/sashabaranov/go-openai v1.36.0
 	mvdan.cc/gofumpt v0.7.0
 )
 
