@@ -112,7 +112,6 @@ linters:
     - sqlclosecheck
     - staticcheck
     - stylecheck
-    - tenv
     - testableexamples
     - thelper
     - unconvert
