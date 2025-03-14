@@ -163,10 +163,12 @@ func testDestination(ctx context.Context, t *testing.T, vectorStoreID string) sd
 	is := is.New(t)
 	dest := NewDestination()
 
-	err := dest.Configure(ctx, config.Config{
-		DestinationConfigApiKey:        getOpenAIApiKey(t),
-		DestinationConfigVectorStoreId: vectorStoreID,
-	})
+	cfg := config.Config{
+		"api_key":         getOpenAIApiKey(t),
+		"vector_store_id": vectorStoreID,
+	}
+
+	err := sdk.Util.ParseConfig(ctx, cfg, dest.Config(), Connector.NewSpecification().DestinationParams)
 	is.NoErr(err)
 
 	err = dest.Open(ctx)

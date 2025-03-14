@@ -14,14 +14,11 @@
 
 package vectorstore
 
-//go:generate paramgen -output=paramgen_dest.go DestinationConfig
-
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -35,9 +32,13 @@ type Destination struct {
 	client *openai.Client
 }
 
-//go:generate paramgen -output=paramgen_dest.go DestinationConfig
+func (d *Destination) Config() sdk.DestinationConfig {
+	return &d.config
+}
 
 type DestinationConfig struct {
+	sdk.DefaultDestinationMiddleware
+
 	// APIKey is the OpenAI api key to use for the api client.
 	APIKey string `json:"api_key" validate:"required"`
 
@@ -46,23 +47,16 @@ type DestinationConfig struct {
 }
 
 func NewDestination() sdk.Destination {
-	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware(sdk.DestinationWithSchemaExtractionConfig{
-		PayloadEnabled: lang.Ptr(false),
-		KeyEnabled:     lang.Ptr(false),
-	})...)
-}
-
-func (d *Destination) Parameters() config.Parameters {
-	return d.config.Parameters()
-}
-
-func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
-	sdk.Logger(ctx).Info().Msg("configuring destination...")
-	err := sdk.Util.ParseConfig(ctx, cfg, &d.config, NewDestination().Parameters())
-	if err != nil {
-		return fmt.Errorf("invalid config: %w", err)
-	}
-	return nil
+	return sdk.DestinationWithMiddleware(&Destination{
+		config: DestinationConfig{
+			DefaultDestinationMiddleware: sdk.DefaultDestinationMiddleware{
+				DestinationWithSchemaExtraction: sdk.DestinationWithSchemaExtraction{
+					PayloadEnabled: lang.Ptr(false),
+					KeyEnabled:     lang.Ptr(false),
+				},
+			},
+		},
+	})
 }
 
 func (d *Destination) Open(ctx context.Context) error {
@@ -73,10 +67,8 @@ func (d *Destination) Open(ctx context.Context) error {
 		return fmt.Errorf("failed to retrieve vector store %s: %w", d.config.VectorStoreID, err)
 	}
 
-	sdk.Logger(ctx).Info().
-		Str(DestinationConfigApiKey, "valid").
-		Str(DestinationConfigVectorStoreId, "valid").
-		Msg("successfully validated config, destination is ready to start writing records")
+	sdk.Logger(ctx).Info().Msg("api key is valid")
+	sdk.Logger(ctx).Info().Msg("vector store is valid")
 
 	return nil
 }

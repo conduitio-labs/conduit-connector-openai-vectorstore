@@ -1,0 +1,89 @@
+version: "1.0"
+specification:
+  name: openai-vectorstore
+  summary: A Conduit Connector for OpenAI vector stores
+  description: |
+    The OpenAI vector store connector is one of [Conduit](https://github.com/ConduitIO/conduit) standalone plugins. It provides a destination connector for [OpenAI vector stores](https://platform.openai.com/docs/api-reference/vector-stores).
+
+    # How is the record written
+
+    The connector will read the whole record and try to upload the `.Payload.After` bytes into OpenAI. There's no support for partial uploads at the moment, each record represents a single file. If two records with the same key are received, a single file will be written.
+
+    In order to process an update record, we delete the file and create it, which might be a bit slow. Updates then must include the whole file in the record.
+
+    Files are written with `assistants` with [purpose](https://platform.openai.com/docs/api-reference/files/create#files-create-purpose) as  part of the request body.
+
+    Deletes work as expected, deleting the file from the vector store and deleting the file itself from OpenAI.
+  version: (devel)
+  author: Meroxa, Inc.
+  destination:
+    parameters:
+      - name: api_key
+        description: APIKey is the OpenAI api key to use for the api client.
+        type: string
+        default: ""
+        validations:
+          - type: required
+            value: ""
+      - name: vector_store_id
+        description: VectorStoreID is the id of the vector store to write records into.
+        type: string
+        default: ""
+        validations:
+          - type: required
+            value: ""
+      - name: sdk.batch.delay
+        description: Maximum delay before an incomplete batch is written to the destination.
+        type: duration
+        default: "0"
+        validations: []
+      - name: sdk.batch.size
+        description: Maximum size of batch before it gets written to the destination.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.burst
+        description: |-
+          Allow bursts of at most X records (0 or less means that bursts are not
+          limited). Only takes effect if a rate limit per second is set. Note that
+          if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch
+          size will be equal to `sdk.rate.burst`.
+        type: int
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.rate.perSecond
+        description: Maximum number of records written per second (0 means no rate limit).
+        type: float
+        default: "0"
+        validations:
+          - type: greater-than
+            value: "-1"
+      - name: sdk.record.format
+        description: |-
+          The format of the output record. See the Conduit documentation for a full
+          list of supported formats (https://conduit.io/docs/using/connectors/configuration-parameters/output-format).
+        type: string
+        default: opencdc/json
+        validations: []
+      - name: sdk.record.format.options
+        description: |-
+          Options to configure the chosen output record format. Options are normally
+          key=value pairs separated with comma (e.g. opt1=val2,opt2=val2), except
+          for the `template` record format, where options are a Go template.
+        type: string
+        default: ""
+        validations: []
+      - name: sdk.schema.extract.key.enabled
+        description: Whether to extract and decode the record key with a schema.
+        type: bool
+        default: "false"
+        validations: []
+      - name: sdk.schema.extract.payload.enabled
+        description: Whether to extract and decode the record payload with a schema.
+        type: bool
+        default: "false"
+        validations: []
