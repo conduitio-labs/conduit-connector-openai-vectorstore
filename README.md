@@ -26,11 +26,11 @@ pipelines:
       - id: example
         plugin: "openai-vectorstore"
         settings:
-          # APIKey is the OpenAI api key to use for the api client.
+          # The OpenAI api key to use for the api client.
           # Type: string
           # Required: yes
           api_key: ""
-          # VectorStoreID is the id of the vector store to write records into.
+          # The id of the vector store to write records into.
           # Type: string
           # Required: yes
           vector_store_id: ""
