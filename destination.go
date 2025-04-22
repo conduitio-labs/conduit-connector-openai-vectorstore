@@ -39,10 +39,10 @@ func (d *Destination) Config() sdk.DestinationConfig {
 type DestinationConfig struct {
 	sdk.DefaultDestinationMiddleware
 
-	// APIKey is the OpenAI api key to use for the api client.
+	// The OpenAI api key to use for the api client.
 	APIKey string `json:"api_key" validate:"required"`
 
-	// VectorStoreID is the id of the vector store to write records into.
+	// The id of the vector store to write records into.
 	VectorStoreID string `json:"vector_store_id" validate:"required"`
 }
 

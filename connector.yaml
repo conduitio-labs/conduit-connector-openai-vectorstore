@@ -19,14 +19,14 @@ specification:
   destination:
     parameters:
       - name: api_key
-        description: APIKey is the OpenAI api key to use for the api client.
+        description: The OpenAI api key to use for the api client.
         type: string
         default: ""
         validations:
           - type: required
             value: ""
       - name: vector_store_id
-        description: VectorStoreID is the id of the vector store to write records into.
+        description: The id of the vector store to write records into.
         type: string
         default: ""
         validations:
